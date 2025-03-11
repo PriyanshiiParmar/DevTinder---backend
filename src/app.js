@@ -7,6 +7,7 @@ const { validateSignUp, validateLogin } = require("./utils/validate");
 const bcrypt = require("bcrypt");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
+const {userAuth} = require('./middlewares/auth')
 
 app.use(express.json());
 app.use(cookieParser());
@@ -15,18 +16,19 @@ app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     validateLogin(req);
+    console.log(email, password);
     const user = await User.findOne({ email: email });
     if (!user) {
       throw new Error("User not found");
     }
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = user.validatePassword(password)
     if (!isPasswordValid) {
       throw new Error("Invalid credentials");
     } else {
-      const token = await jwt.sign({ _id: user._id }, "TheSecret@Key");
+      const token = user.getJWT()
       // console.log(token);
       res.cookie("token", token);
-      res.send("Login successful");
+      res.send("Login successful")
     }
   } catch (err) {
     res.status(400).send("ERROR :  " + err);
@@ -34,20 +36,11 @@ app.post("/login", async (req, res) => {
 });
 
 
-app.get("/profile", async (req, res) => {
+app.get("/profile", userAuth ,async (req, res) => {
   try {
-    const { token } = req.cookies;
-    if (!token) {
-      throw new Error("User not authenticated");
-    }
-
-    console.log("Received Token:", token);
-
-    const decodedMessage =  await jwt.verify(token,"TheSecret@Key");
-    console.log(decodedMessage, "is decoded message")
-    const id = decodedMessage._id;
-    const user = await User.findById(id);
-    res.send(user);
+    const user = req.user;
+    console.log(user);
+    res.send(user)
   } catch (err) {
     res.status(400).send("ERROR :  " + err);
   }
@@ -76,29 +69,10 @@ app.post("/signup", async (req, res) => {
   }
 });
 
-app.get("/feed", async (req, res) => {
-  const email = req.body.email;
-  const id = req.body.id;
-  try {
-    const user = await User.findOne({ email: email });
-    // const user = await User.findById(id);
-    if (!user) res.send("No user found with this email");
-    else res.send(user);
-  } catch {
-    res.status(400).send("Something went wrong");
-  }
-});
-
-app.get("/deleteUser", async (req, res) => {
-  const id = req.body.id;
-  try {
-    const user = await User.findByIdAndDelete(id);
-    if (!user) res.send("no user found");
-    else res.send("User deleted successfully");
-  } catch {
-    res.status(400).send("Something went wrong");
-  }
-});
+app.get('/sendConnectionRequest', userAuth, async (req, res) => {
+  const user = req.user;
+ res.send(user.firstName + ' send connection request')
+})
 
 app.patch("/updateUser/:userId", async (req, res) => {
   const userId = req.params.userId;
@@ -147,5 +121,5 @@ connectDB()
     });
   })
   .catch((err) => {
-    console.error("Error connecting to database", err);
+    console.error("Error connecting to database", err)
   });
